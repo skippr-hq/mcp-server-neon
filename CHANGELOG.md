@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.3] - 2025-03-06
+
+- Adds `get_connection_string` tool
+- Hints the LLM to call the `create_project` tool to create new databases
+
 ## [0.2.2] - 2025-02-26
 
 - Fixed a bug in the `list_projects` tool when passing no params
