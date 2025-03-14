@@ -1,5 +1,6 @@
 import { ListProjectsParams } from '@neondatabase/api-client';
 import { z } from 'zod';
+import { NEON_DEFAULT_DATABASE_NAME } from './constants.js';
 
 type ZodObjectParams<T> = z.ZodObject<{ [key in keyof T]: z.ZodType<T[key]> }>;
 
@@ -154,4 +155,17 @@ export const getConnectionStringInputSchema = z.object({
     .describe(
       'The name of the role to connect with. If not provided, the default role (usually "neondb_owner") will be used.',
     ),
+});
+
+export const provisionNeonAuthInputSchema = z.object({
+  projectId: z
+    .string()
+    .describe('The ID of the project to provision Neon Auth for'),
+  database: z
+    .string()
+    .optional()
+    .describe(
+      `The database name to setup Neon Auth for. Defaults to '${NEON_DEFAULT_DATABASE_NAME}'`,
+    )
+    .default(NEON_DEFAULT_DATABASE_NAME),
 });
