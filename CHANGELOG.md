@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.0] - 2025-03-14
+
+- Add `provision_neon_auth` tool
+
 ## [0.2.3] - 2025-03-06
 
 - Adds `get_connection_string` tool
