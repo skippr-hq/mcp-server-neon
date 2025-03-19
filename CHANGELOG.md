@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.3] - 2025-03-19
+
+- Fix the API Host
+
 ## [0.3.2] - 2025-03-19
 
 - Add User-Agent to api calls from mcp server
