@@ -6,6 +6,14 @@ import { handleInit, parseArgs } from './initConfig.js';
 import { createApiClient } from '@neondatabase/api-client';
 import './polyfills.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const packageJson = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'),
+);
 
 const commands = ['init', 'start'] as const;
 const { command, neonApiKey, executablePath } = parseArgs();
@@ -25,13 +33,17 @@ if (command === 'init') {
 
 // "start" command from here
 // ----------------------------
+
 export const neonClient = createApiClient({
   apiKey: neonApiKey,
+  headers: {
+    'User-Agent': `mcp-server-neon/${packageJson.version}`,
+  },
 });
 
 const server = new McpServer({
   name: 'mcp-server-neon',
-  version: '0.1.0',
+  version: packageJson.version,
 });
 
 NEON_TOOLS.forEach((tool) => {
