@@ -2,6 +2,7 @@
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { NEON_HANDLERS, NEON_TOOLS, ToolHandler } from './tools.js';
+import { NEON_RESOURCES } from './resources.js';
 import { handleInit, parseArgs } from './initConfig.js';
 import { createApiClient } from '@neondatabase/api-client';
 import './polyfills.js';
@@ -41,11 +42,20 @@ export const neonClient = createApiClient({
   },
 });
 
-const server = new McpServer({
-  name: 'mcp-server-neon',
-  version: packageJson.version,
-});
+const server = new McpServer(
+  {
+    name: 'mcp-server-neon',
+    version: packageJson.version,
+  },
+  {
+    capabilities: {
+      tools: {},
+      resources: {},
+    },
+  },
+);
 
+// Register tools
 NEON_TOOLS.forEach((tool) => {
   const handler = NEON_HANDLERS[tool.name];
   if (!handler) {
@@ -57,6 +67,19 @@ NEON_TOOLS.forEach((tool) => {
     tool.description,
     { params: tool.inputSchema },
     handler as ToolHandler<typeof tool.name>,
+  );
+});
+
+// Register resources
+NEON_RESOURCES.forEach((resource) => {
+  server.resource(
+    resource.name,
+    resource.uri,
+    {
+      description: resource.description,
+      mimeType: resource.mimeType,
+    },
+    resource.handler,
   );
 });
 

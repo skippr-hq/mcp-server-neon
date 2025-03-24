@@ -1,5 +1,9 @@
 # Changelog
 
+## UNRELEASED
+
+- Add `neon-auth`, `neon-serverless`, and `neon-drizzle` resources
+
 ## [0.3.3] - 2025-03-19
 
 - Fix the API Host
