@@ -5,24 +5,24 @@
       "name": "@neondatabase/mcp-server-neon",
       "dependencies": {
         "@modelcontextprotocol/sdk": "1.6.0",
-        "@neondatabase/api-client": "1.13.0",
+        "@neondatabase/api-client": "2.0.0",
         "@neondatabase/serverless": "0.10.4",
         "chalk": "5.3.0",
         "node-fetch": "2.7.0",
         "zod": "3.24.1",
       },
       "devDependencies": {
-        "@eslint/js": "^9.21.0",
-        "@types/node": "^20.11.24",
-        "@types/node-fetch": "^2.6.12",
+        "@eslint/js": "9.21.0",
+        "@types/node": "20.17.9",
+        "@types/node-fetch": "2.6.12",
         "autoevals": "0.0.111",
         "braintrust": "0.0.177",
-        "bun": "^1.1.38",
-        "eslint": "^9.21.0",
-        "eslint-config-prettier": "^10.0.2",
-        "prettier": "^3.4.1",
-        "tsc-watch": "^6.2.1",
-        "typescript": "^5.3.3",
+        "bun": "1.1.40",
+        "eslint": "9.21.0",
+        "eslint-config-prettier": "10.0.2",
+        "prettier": "3.4.1",
+        "tsc-watch": "6.2.1",
+        "typescript": "5.7.2",
         "typescript-eslint": "v8.25.0",
       },
     },
@@ -140,7 +140,7 @@
 
     "@modelcontextprotocol/sdk": ["@modelcontextprotocol/sdk@1.6.0", "", { "dependencies": { "content-type": "^1.0.5", "cors": "^2.8.5", "eventsource": "^3.0.2", "express": "^5.0.1", "express-rate-limit": "^7.5.0", "pkce-challenge": "^4.1.0", "raw-body": "^3.0.0", "zod": "^3.23.8", "zod-to-json-schema": "^3.24.1" } }, "sha512-585s8g+jzuGBomzgzDeP5l8gEyiSs+KhoAHbA2ZZ24Zgm83IZsyCLl/fmWhPHbfYsuLG8NE6SWGZA5ZBql8jSw=="],
 
-    "@neondatabase/api-client": ["@neondatabase/api-client@1.13.0", "", { "dependencies": { "axios": "^1.7.9" } }, "sha512-grB9eW8YBS6oJe1Hun9mAzebpW2+ZoWb3BVKM1dhkYV/ZAtEOX2VOxwUcRKmi5PGA7xYItgszsKQuuQv068ULQ=="],
+    "@neondatabase/api-client": ["@neondatabase/api-client@2.0.0", "", { "dependencies": { "axios": "^1.7.9" } }, "sha512-UwjRRy8gyShNDfbbP1N+rA235FzqVWP/WPi4cgLnkGgConqpiR+U9Dsegaxu+HxAgK678kQ/5wc4/EPexvE7tw=="],
 
     "@neondatabase/serverless": ["@neondatabase/serverless@0.10.4", "", { "dependencies": { "@types/pg": "8.11.6" } }, "sha512-2nZuh3VUO9voBauuh+IGYRhGU/MskWHt1IuZvHcJw6GLjDgtqj/KViKo7SIrLdGLdot7vFbiRRw+BgEy3wT9HA=="],
 
