@@ -1,6 +1,6 @@
 # Changelog
 
-## UNRELEASED
+## [0.3.5] - 2025-04-19
 
 - Fix default database name or role name assumptions.
 - Adds better error message for project creations.
