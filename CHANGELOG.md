@@ -3,6 +3,7 @@
 ## UNRELEASED
 
 - Fix default database name or role name assumptions.
+- Adds better error message for project creations.
 
 ## [0.3.4] - 2025-03-26
 

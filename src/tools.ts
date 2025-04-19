@@ -29,7 +29,7 @@ import {
 import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { handleProvisionNeonAuth } from './handlers/neon-auth.js';
 import { NEON_DEFAULT_DATABASE_NAME } from './constants.js';
-
+import { AxiosError } from 'axios';
 // Define the tools with their configurations
 export const NEON_TOOLS = [
   {
@@ -391,9 +391,25 @@ async function handleCreateProject(name?: string) {
     project: { name },
   });
   if (response.status !== 201) {
-    throw new Error(`Failed to create project: ${response.statusText}`);
+    throw new Error(`Failed to create project: ${JSON.stringify(response)}`);
   }
   return response.data;
+  /*try {
+    const response = await neonClient.createProject({
+      project: { name },
+    });
+    
+    return response.data;
+  } catch (error) {
+    
+    if (error instanceof Object && "status" in error && error.status === 422) {
+      throw new Error(
+        `You have reached the Neon project limit. Please upgrade your account in this link: https://console.neon.tech/app/billing`,
+      );
+    }
+
+    throw new Error(`Failed to create project: ${error}`);
+  }*/
 }
 
 async function handleDeleteProject(projectId: string) {
@@ -746,40 +762,56 @@ export const NEON_HANDLERS = {
   },
 
   create_project: async ({ params }) => {
-    const result = await handleCreateProject(params.name);
+    try {
+      const result = await handleCreateProject(params.name);
 
-    // Get the connection string for the newly created project
-    const connectionString = await handleGetConnectionString({
-      projectId: result.project.id,
-      branchId: result.branch.id,
-      databaseName: result.databases[0].name,
-    });
+      // Get the connection string for the newly created project
+      const connectionString = await handleGetConnectionString({
+        projectId: result.project.id,
+        branchId: result.branch.id,
+        databaseName: result.databases[0].name,
+      });
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: [
-            'Your Neon project is ready.',
-            `The project_id is "${result.project.id}"`,
-            `The branch name is "${result.branch.name}" (ID: ${result.branch.id})`,
-            `There is one database available on this branch, called "${result.databases[0].name}",`,
-            'but you can create more databases using SQL commands.',
-            '',
-            'Connection string details:',
-            `URI: ${connectionString.uri}`,
-            `Project ID: ${connectionString.projectId}`,
-            `Branch ID: ${connectionString.branchId}`,
-            `Database: ${connectionString.databaseName}`,
-            `Role: ${connectionString.roleName}`,
-            '',
-            'You can use this connection string with any PostgreSQL client to connect to your Neon database.',
-            'For example, with psql:',
-            `psql "${connectionString.uri}"`,
-          ].join('\n'),
-        },
-      ],
-    };
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              'Your Neon project is ready.',
+              `The project_id is "${result.project.id}"`,
+              `The branch name is "${result.branch.name}" (ID: ${result.branch.id})`,
+              `There is one database available on this branch, called "${result.databases[0].name}",`,
+              'but you can create more databases using SQL commands.',
+              '',
+              'Connection string details:',
+              `URI: ${connectionString.uri}`,
+              `Project ID: ${connectionString.projectId}`,
+              `Branch ID: ${connectionString.branchId}`,
+              `Database: ${connectionString.databaseName}`,
+              `Role: ${connectionString.roleName}`,
+              '',
+              'You can use this connection string with any PostgreSQL client to connect to your Neon database.',
+              'For example, with psql:',
+              `psql "${connectionString.uri}"`,
+            ].join('\n'),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              'An error occurred while creating the project.',
+              'Error details:',
+              `${error}`,
+              'If you have reached the Neon project limit, please upgrade your account in this link: https://console.neon.tech/app/billing',
+            ].join('\n'),
+          },
+        ],
+      };
+    }
   },
 
   delete_project: async ({ params }) => {
