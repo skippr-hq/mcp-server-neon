@@ -456,7 +456,7 @@ async function handleRunSql({
     databaseName,
   });
   const runQuery = neon(connectionString.uri);
-  const response = await runQuery(sql);
+  const response = await runQuery.query(sql);
 
   return response;
 }
@@ -479,7 +479,7 @@ async function handleRunSqlTransaction({
   });
   const runQuery = neon(connectionString.uri);
   const response = await runQuery.transaction(
-    sqlStatements.map((sql) => runQuery(sql)),
+    sqlStatements.map((sql) => runQuery.query(sql)),
   );
 
   return response;
@@ -510,7 +510,7 @@ async function handleGetDatabaseTables({
     ORDER BY table_schema, table_name;
   `;
 
-  const tables = await runQuery(query);
+  const tables = await runQuery.query(query);
   return tables;
 }
 
@@ -741,7 +741,7 @@ async function handleDescribeBranch({
   });
   const runQuery = neon(connectionString.uri);
   const response = await runQuery.transaction(
-    DESCRIBE_DATABASE_STATEMENTS.map((sql) => runQuery(sql)),
+    DESCRIBE_DATABASE_STATEMENTS.map((sql) => runQuery.query(sql)),
   );
 
   return response;
