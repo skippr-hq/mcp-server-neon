@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.6] - 2025-04-20
+
+- Bumps the Neon serverless driver to 1.0.0
+
 ## [0.3.5] - 2025-04-19
 
 - Fix default database name or role name assumptions.
