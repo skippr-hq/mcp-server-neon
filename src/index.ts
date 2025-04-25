@@ -37,6 +37,8 @@ if (command === 'init') {
 
 export const neonClient = createApiClient({
   apiKey: neonApiKey,
+  // activate the following line for Neon dev environment
+  // baseURL: 'https://console-stage.neon.build/api/v2',
   headers: {
     'User-Agent': `mcp-server-neon/${packageJson.version}`,
   },
