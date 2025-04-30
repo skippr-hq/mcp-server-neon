@@ -1,5 +1,9 @@
 # Changelog
 
+## UNRELEASED
+
+- Feature: Support for remote MCP with OAuth flow.
+
 ## [0.3.7] - 2025-04-23
 
 - Fixes Neon Auth instructions to install latest version of the SDK

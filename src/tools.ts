@@ -1,5 +1,6 @@
 import { ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
+  Api,
   Branch,
   EndpointType,
   ListProjectsParams,
@@ -7,9 +8,9 @@ import {
 import { neon } from '@neondatabase/serverless';
 import crypto from 'crypto';
 import { NEON_DEFAULT_DATABASE_NAME } from './constants.js';
+
 import { describeTable, formatTableDescription } from './describeUtils.js';
 import { handleProvisionNeonAuth } from './handlers/neon-auth.js';
-import { neonClient } from './index.js';
 import { getMigrationFromMemory, persistMigrationToMemory } from './state.js';
 import {
   completeDatabaseMigrationInputSchema,
@@ -575,17 +576,32 @@ export const NEON_TOOLS = [
 
 // Extract the tool names as a union type
 type NeonToolName = (typeof NEON_TOOLS)[number]['name'];
+export type ToolParams<T extends NeonToolName> = Extract<
+  (typeof NEON_TOOLS)[number],
+  { name: T }
+>['inputSchema'];
 
-export type ToolHandler<T extends NeonToolName> = ToolCallback<{
-  params: Extract<(typeof NEON_TOOLS)[number], { name: T }>['inputSchema'];
+type ToolHandler<T extends NeonToolName> = ToolCallback<{
+  params: ToolParams<T>;
 }>;
+
+export type ToolHandlerExtended<T extends NeonToolName> = (
+  ...args: [
+    args: Parameters<ToolHandler<T>>['0'],
+    neonClient: Api<unknown>,
+    extra: Parameters<ToolHandler<T>>['1'],
+  ]
+) => ReturnType<ToolHandler<T>>;
 
 // Create a type for the tool handlers that directly maps each tool to its appropriate input schema
 type ToolHandlers = {
-  [K in NeonToolName]: ToolHandler<K>;
+  [K in NeonToolName]: ToolHandlerExtended<K>;
 };
 
-async function handleListProjects(params: ListProjectsParams) {
+async function handleListProjects(
+  params: ListProjectsParams,
+  neonClient: Api<unknown>,
+) {
   const response = await neonClient.listProjects(params);
   if (response.status !== 200) {
     throw new Error(`Failed to list projects: ${response.statusText}`);
@@ -593,7 +609,7 @@ async function handleListProjects(params: ListProjectsParams) {
   return response.data.projects;
 }
 
-async function handleCreateProject(name?: string) {
+async function handleCreateProject(neonClient: Api<unknown>, name?: string) {
   const response = await neonClient.createProject({
     project: { name },
   });
@@ -619,7 +635,10 @@ async function handleCreateProject(name?: string) {
   }*/
 }
 
-async function handleDeleteProject(projectId: string) {
+async function handleDeleteProject(
+  projectId: string,
+  neonClient: Api<unknown>,
+) {
   const response = await neonClient.deleteProject(projectId);
   if (response.status !== 200) {
     throw new Error(`Failed to delete project: ${response.statusText}`);
@@ -627,7 +646,10 @@ async function handleDeleteProject(projectId: string) {
   return response.data;
 }
 
-async function handleDescribeProject(projectId: string) {
+async function handleDescribeProject(
+  projectId: string,
+  neonClient: Api<unknown>,
+) {
   const projectBranches = await neonClient.listProjectBranches({
     projectId: projectId,
   });
@@ -646,44 +668,56 @@ async function handleDescribeProject(projectId: string) {
   };
 }
 
-async function handleRunSql({
-  sql,
-  databaseName,
-  projectId,
-  branchId,
-}: {
-  sql: string;
-  databaseName?: string;
-  projectId: string;
-  branchId?: string;
-}) {
-  const connectionString = await handleGetConnectionString({
+async function handleRunSql(
+  {
+    sql,
+    databaseName,
     projectId,
     branchId,
-    databaseName,
-  });
+  }: {
+    sql: string;
+    databaseName?: string;
+    projectId: string;
+    branchId?: string;
+  },
+  neonClient: Api<unknown>,
+) {
+  const connectionString = await handleGetConnectionString(
+    {
+      projectId,
+      branchId,
+      databaseName,
+    },
+    neonClient,
+  );
   const runQuery = neon(connectionString.uri);
   const response = await runQuery.query(sql);
 
   return response;
 }
 
-async function handleRunSqlTransaction({
-  sqlStatements,
-  databaseName,
-  projectId,
-  branchId,
-}: {
-  sqlStatements: string[];
-  databaseName?: string;
-  projectId: string;
-  branchId?: string;
-}) {
-  const connectionString = await handleGetConnectionString({
+async function handleRunSqlTransaction(
+  {
+    sqlStatements,
+    databaseName,
     projectId,
     branchId,
-    databaseName,
-  });
+  }: {
+    sqlStatements: string[];
+    databaseName?: string;
+    projectId: string;
+    branchId?: string;
+  },
+  neonClient: Api<unknown>,
+) {
+  const connectionString = await handleGetConnectionString(
+    {
+      projectId,
+      branchId,
+      databaseName,
+    },
+    neonClient,
+  );
   const runQuery = neon(connectionString.uri);
   const response = await runQuery.transaction(
     sqlStatements.map((sql) => runQuery.query(sql)),
@@ -692,20 +726,26 @@ async function handleRunSqlTransaction({
   return response;
 }
 
-async function handleGetDatabaseTables({
-  projectId,
-  databaseName,
-  branchId,
-}: {
-  projectId: string;
-  databaseName?: string;
-  branchId?: string;
-}) {
-  const connectionString = await handleGetConnectionString({
+async function handleGetDatabaseTables(
+  {
     projectId,
-    branchId,
     databaseName,
-  });
+    branchId,
+  }: {
+    projectId: string;
+    databaseName?: string;
+    branchId?: string;
+  },
+  neonClient: Api<unknown>,
+) {
+  const connectionString = await handleGetConnectionString(
+    {
+      projectId,
+      branchId,
+      databaseName,
+    },
+    neonClient,
+  );
   const runQuery = neon(connectionString.uri);
   const query = `
     SELECT 
@@ -721,22 +761,28 @@ async function handleGetDatabaseTables({
   return tables;
 }
 
-async function handleDescribeTableSchema({
-  projectId,
-  databaseName,
-  branchId,
-  tableName,
-}: {
-  projectId: string;
-  databaseName?: string;
-  branchId?: string;
-  tableName: string;
-}) {
-  const connectionString = await handleGetConnectionString({
+async function handleDescribeTableSchema(
+  {
     projectId,
-    branchId,
     databaseName,
-  });
+    branchId,
+    tableName,
+  }: {
+    projectId: string;
+    databaseName?: string;
+    branchId?: string;
+    tableName: string;
+  },
+  neonClient: Api<unknown>,
+) {
+  const connectionString = await handleGetConnectionString(
+    {
+      projectId,
+      branchId,
+      databaseName,
+    },
+    neonClient,
+  );
 
   // Extract table name without schema if schema-qualified
   const tableNameParts = tableName.split('.');
@@ -752,13 +798,16 @@ async function handleDescribeTableSchema({
   };
 }
 
-async function handleCreateBranch({
-  projectId,
-  branchName,
-}: {
-  projectId: string;
-  branchName?: string;
-}) {
+async function handleCreateBranch(
+  {
+    projectId,
+    branchName,
+  }: {
+    projectId: string;
+    branchName?: string;
+  },
+  neonClient: Api<unknown>,
+) {
   const response = await neonClient.createProjectBranch(projectId, {
     branch: {
       name: branchName,
@@ -780,33 +829,39 @@ async function handleCreateBranch({
   return response.data;
 }
 
-async function handleDeleteBranch({
-  projectId,
-  branchId,
-}: {
-  projectId: string;
-  branchId: string;
-}) {
+async function handleDeleteBranch(
+  {
+    projectId,
+    branchId,
+  }: {
+    projectId: string;
+    branchId: string;
+  },
+  neonClient: Api<unknown>,
+) {
   const response = await neonClient.deleteProjectBranch(projectId, branchId);
   return response.data;
 }
 
-async function handleGetConnectionString({
-  projectId,
-  branchId,
-  computeId,
-  databaseName,
-  roleName,
-}: {
-  projectId?: string;
-  branchId?: string;
-  computeId?: string;
-  databaseName?: string;
-  roleName?: string;
-}) {
+async function handleGetConnectionString(
+  {
+    projectId,
+    branchId,
+    computeId,
+    databaseName,
+    roleName,
+  }: {
+    projectId?: string;
+    branchId?: string;
+    computeId?: string;
+    databaseName?: string;
+    roleName?: string;
+  },
+  neonClient: Api<unknown>,
+) {
   // If projectId is not provided, get the first project but only if there is only one project
   if (!projectId) {
-    const projects = await handleListProjects({});
+    const projects = await handleListProjects({}, neonClient);
     if (projects.length === 1) {
       projectId = projects[0].id;
     } else {
@@ -831,11 +886,14 @@ async function handleGetConnectionString({
   // If databaseName is not provided, use default `neondb` or first database
   let dbObject;
   if (!databaseName) {
-    dbObject = await getDefaultDatabase({
-      projectId,
-      branchId,
-      databaseName,
-    });
+    dbObject = await getDefaultDatabase(
+      {
+        projectId,
+        branchId,
+        databaseName,
+      },
+      neonClient,
+    );
     databaseName = dbObject.name;
 
     if (!roleName) {
@@ -869,32 +927,41 @@ async function handleGetConnectionString({
   };
 }
 
-async function handleSchemaMigration({
-  migrationSql,
-  databaseName,
-  projectId,
-}: {
-  databaseName?: string;
-  projectId: string;
-  migrationSql: string;
-}) {
-  const newBranch = await handleCreateBranch({ projectId });
+async function handleSchemaMigration(
+  {
+    migrationSql,
+    databaseName,
+    projectId,
+  }: {
+    databaseName?: string;
+    projectId: string;
+    migrationSql: string;
+  },
+  neonClient: Api<unknown>,
+) {
+  const newBranch = await handleCreateBranch({ projectId }, neonClient);
 
   if (!databaseName) {
-    const dbObject = await getDefaultDatabase({
-      projectId,
-      branchId: newBranch.branch.id,
-      databaseName,
-    });
+    const dbObject = await getDefaultDatabase(
+      {
+        projectId,
+        branchId: newBranch.branch.id,
+        databaseName,
+      },
+      neonClient,
+    );
     databaseName = dbObject.name;
   }
 
-  const result = await handleRunSqlTransaction({
-    sqlStatements: splitSqlStatements(migrationSql),
-    databaseName,
-    projectId,
-    branchId: newBranch.branch.id,
-  });
+  const result = await handleRunSqlTransaction(
+    {
+      sqlStatements: splitSqlStatements(migrationSql),
+      databaseName,
+      projectId,
+      branchId: newBranch.branch.id,
+    },
+    neonClient,
+  );
 
   const migrationId = crypto.randomUUID();
   persistMigrationToMemory(migrationId, {
@@ -910,23 +977,32 @@ async function handleSchemaMigration({
   };
 }
 
-async function handleCommitMigration({ migrationId }: { migrationId: string }) {
+async function handleCommitMigration(
+  { migrationId }: { migrationId: string },
+  neonClient: Api<unknown>,
+) {
   const migration = getMigrationFromMemory(migrationId);
   if (!migration) {
     throw new Error(`Migration not found: ${migrationId}`);
   }
 
-  const result = await handleRunSqlTransaction({
-    sqlStatements: splitSqlStatements(migration.migrationSql),
-    databaseName: migration.databaseName,
-    projectId: migration.appliedBranch.project_id,
-    branchId: migration.appliedBranch.parent_id,
-  });
+  const result = await handleRunSqlTransaction(
+    {
+      sqlStatements: splitSqlStatements(migration.migrationSql),
+      databaseName: migration.databaseName,
+      projectId: migration.appliedBranch.project_id,
+      branchId: migration.appliedBranch.parent_id,
+    },
+    neonClient,
+  );
 
-  await handleDeleteBranch({
-    projectId: migration.appliedBranch.project_id,
-    branchId: migration.appliedBranch.id,
-  });
+  await handleDeleteBranch(
+    {
+      projectId: migration.appliedBranch.project_id,
+      branchId: migration.appliedBranch.id,
+    },
+    neonClient,
+  );
 
   return {
     deletedBranch: migration.appliedBranch,
@@ -934,20 +1010,26 @@ async function handleCommitMigration({ migrationId }: { migrationId: string }) {
   };
 }
 
-async function handleDescribeBranch({
-  projectId,
-  databaseName,
-  branchId,
-}: {
-  projectId: string;
-  databaseName?: string;
-  branchId?: string;
-}) {
-  const connectionString = await handleGetConnectionString({
+async function handleDescribeBranch(
+  {
     projectId,
-    branchId,
     databaseName,
-  });
+    branchId,
+  }: {
+    projectId: string;
+    databaseName?: string;
+    branchId?: string;
+  },
+  neonClient: Api<unknown>,
+) {
+  const connectionString = await handleGetConnectionString(
+    {
+      projectId,
+      branchId,
+      databaseName,
+    },
+    neonClient,
+  );
   const runQuery = neon(connectionString.uri);
   const response = await runQuery.transaction(
     DESCRIBE_DATABASE_STATEMENTS.map((sql) => runQuery.query(sql)),
@@ -956,29 +1038,35 @@ async function handleDescribeBranch({
   return response;
 }
 
-async function handleExplainSqlStatement({
-  params,
-}: {
-  params: {
-    sql: string;
-    databaseName?: string;
-    projectId: string;
-    branchId?: string;
-    analyze: boolean;
-  };
-}) {
+async function handleExplainSqlStatement(
+  {
+    params,
+  }: {
+    params: {
+      sql: string;
+      databaseName?: string;
+      projectId: string;
+      branchId?: string;
+      analyze: boolean;
+    };
+  },
+  neonClient: Api<unknown>,
+) {
   const explainPrefix = params.analyze
     ? 'EXPLAIN (ANALYZE, VERBOSE, BUFFERS, FILECACHE, FORMAT JSON)'
     : 'EXPLAIN (VERBOSE, FORMAT JSON)';
 
   const explainSql = `${explainPrefix} ${params.sql}`;
 
-  const result = await handleRunSql({
-    sql: explainSql,
-    databaseName: params.databaseName,
-    projectId: params.projectId,
-    branchId: params.branchId,
-  });
+  const result = await handleRunSql(
+    {
+      sql: explainSql,
+      databaseName: params.databaseName,
+      projectId: params.projectId,
+      branchId: params.branchId,
+    },
+    neonClient,
+  );
 
   return {
     content: [
@@ -992,8 +1080,9 @@ async function handleExplainSqlStatement({
 
 async function createTemporaryBranch(
   projectId: string,
+  neonClient: Api<unknown>,
 ): Promise<{ branch: Branch }> {
-  const result = await handleCreateBranch({ projectId });
+  const result = await handleCreateBranch({ projectId }, neonClient);
   if (!result?.branch) {
     throw new Error('Failed to create temporary branch');
   }
@@ -1037,13 +1126,14 @@ type CompleteTuningResult = {
 
 async function handleQueryTuning(
   params: QueryTuningParams,
+  neonClient: Api<unknown>,
 ): Promise<QueryTuningResult> {
   let tempBranch: Branch | undefined;
   const tuningId = crypto.randomUUID();
 
   try {
     // Create temporary branch
-    const newBranch = await createTemporaryBranch(params.projectId);
+    const newBranch = await createTemporaryBranch(params.projectId, neonClient);
     if (!newBranch.branch) {
       throw new Error('Failed to create temporary branch: branch is undefined');
     }
@@ -1056,15 +1146,18 @@ async function handleQueryTuning(
     };
 
     // First, get the execution plan with table information
-    const executionPlan = await handleExplainSqlStatement({
-      params: {
-        sql: branchParams.sql,
-        databaseName: branchParams.databaseName,
-        projectId: branchParams.projectId,
-        branchId: tempBranch.id,
-        analyze: true,
+    const executionPlan = await handleExplainSqlStatement(
+      {
+        params: {
+          sql: branchParams.sql,
+          databaseName: branchParams.databaseName,
+          projectId: branchParams.projectId,
+          branchId: tempBranch.id,
+          analyze: true,
+        },
       },
-    });
+      neonClient,
+    );
 
     // Extract table names from the plan
     const tableNames = extractTableNamesFromPlan(executionPlan);
@@ -1079,12 +1172,15 @@ async function handleQueryTuning(
     const tableSchemas = await Promise.all(
       tableNames.map(async (tableName) => {
         try {
-          const schema = await handleDescribeTableSchema({
-            tableName,
-            databaseName: branchParams.databaseName,
-            projectId: branchParams.projectId,
-            branchId: newBranch.branch.id,
-          });
+          const schema = await handleDescribeTableSchema(
+            {
+              tableName,
+              databaseName: branchParams.databaseName,
+              projectId: branchParams.projectId,
+              branchId: newBranch.branch.id,
+            },
+            neonClient,
+          );
           return {
             tableName,
             schema: schema.raw,
@@ -1118,10 +1214,13 @@ async function handleQueryTuning(
     // Always attempt to clean up the temporary branch if it was created
     if (tempBranch) {
       try {
-        await handleDeleteBranch({
-          projectId: params.projectId,
-          branchId: tempBranch.id,
-        });
+        await handleDeleteBranch(
+          {
+            projectId: params.projectId,
+            branchId: tempBranch.id,
+          },
+          neonClient,
+        );
       } catch {
         // No need to handle cleanup error
       }
@@ -1303,6 +1402,7 @@ type HandlerParams = {
 
 async function handleCompleteTuning(
   params: CompleteTuningParams,
+  neonClient: Api<unknown>,
 ): Promise<CompleteTuningResult> {
   let results;
   const operationLog: string[] = [];
@@ -1323,12 +1423,15 @@ async function handleCompleteTuning(
     ) {
       operationLog.push('Applying optimizations to main branch...');
 
-      results = await handleRunSqlTransaction({
-        sqlStatements: params.suggestedSqlStatements,
-        databaseName: params.databaseName,
-        projectId: params.projectId,
-        branchId: params.branch?.id,
-      });
+      results = await handleRunSqlTransaction(
+        {
+          sqlStatements: params.suggestedSqlStatements,
+          databaseName: params.databaseName,
+          projectId: params.projectId,
+          branchId: params.branch?.id,
+        },
+        neonClient,
+      );
 
       operationLog.push('Successfully applied optimizations to main branch.');
     } else {
@@ -1341,10 +1444,13 @@ async function handleCompleteTuning(
     if (params.shouldDeleteTemporaryBranch && params.temporaryBranch) {
       operationLog.push('Cleaning up temporary branch...');
 
-      await handleDeleteBranch({
-        projectId: params.projectId,
-        branchId: params.temporaryBranch.id,
-      });
+      await handleDeleteBranch(
+        {
+          projectId: params.projectId,
+          branchId: params.temporaryBranch.id,
+        },
+        neonClient,
+      );
 
       operationLog.push('Successfully cleaned up temporary branch.');
     }
@@ -1376,23 +1482,26 @@ export const NEON_HANDLERS = {
     content: [{ type: 'text', text: process.version }],
   }),
 
-  list_projects: async ({ params }) => {
-    const projects = await handleListProjects(params);
+  list_projects: async ({ params }, neonClient) => {
+    const projects = await handleListProjects(params, neonClient);
     return {
       content: [{ type: 'text', text: JSON.stringify(projects, null, 2) }],
     };
   },
 
-  create_project: async ({ params }) => {
+  create_project: async ({ params }, neonClient) => {
     try {
-      const result = await handleCreateProject(params.name);
+      const result = await handleCreateProject(neonClient, params.name);
 
       // Get the connection string for the newly created project
-      const connectionString = await handleGetConnectionString({
-        projectId: result.project.id,
-        branchId: result.branch.id,
-        databaseName: result.databases[0].name,
-      });
+      const connectionString = await handleGetConnectionString(
+        {
+          projectId: result.project.id,
+          branchId: result.branch.id,
+          databaseName: result.databases[0].name,
+        },
+        neonClient,
+      );
 
       return {
         content: [
@@ -1436,8 +1545,9 @@ export const NEON_HANDLERS = {
       };
     }
   },
-  delete_project: async ({ params }) => {
-    await handleDeleteProject(params.projectId);
+
+  delete_project: async ({ params }, neonClient) => {
+    await handleDeleteProject(params.projectId, neonClient);
     return {
       content: [
         {
@@ -1451,8 +1561,8 @@ export const NEON_HANDLERS = {
     };
   },
 
-  describe_project: async ({ params }) => {
-    const result = await handleDescribeProject(params.projectId);
+  describe_project: async ({ params }, neonClient) => {
+    const result = await handleDescribeProject(params.projectId, neonClient);
     return {
       content: [
         {
@@ -1471,48 +1581,60 @@ export const NEON_HANDLERS = {
     };
   },
 
-  run_sql: async ({ params }) => {
-    const result = await handleRunSql({
-      sql: params.sql,
-      databaseName: params.databaseName,
-      projectId: params.projectId,
-      branchId: params.branchId,
-    });
+  run_sql: async ({ params }, neonClient) => {
+    const result = await handleRunSql(
+      {
+        sql: params.sql,
+        databaseName: params.databaseName,
+        projectId: params.projectId,
+        branchId: params.branchId,
+      },
+      neonClient,
+    );
     return {
       content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     };
   },
 
-  run_sql_transaction: async ({ params }) => {
-    const result = await handleRunSqlTransaction({
-      sqlStatements: params.sqlStatements,
-      databaseName: params.databaseName,
-      projectId: params.projectId,
-      branchId: params.branchId,
-    });
+  run_sql_transaction: async ({ params }, neonClient) => {
+    const result = await handleRunSqlTransaction(
+      {
+        sqlStatements: params.sqlStatements,
+        databaseName: params.databaseName,
+        projectId: params.projectId,
+        branchId: params.branchId,
+      },
+      neonClient,
+    );
     return {
       content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     };
   },
 
-  describe_table_schema: async ({ params }) => {
-    const result = await handleDescribeTableSchema({
-      tableName: params.tableName,
-      databaseName: params.databaseName,
-      projectId: params.projectId,
-      branchId: params.branchId,
-    });
+  describe_table_schema: async ({ params }, neonClient) => {
+    const result = await handleDescribeTableSchema(
+      {
+        tableName: params.tableName,
+        databaseName: params.databaseName,
+        projectId: params.projectId,
+        branchId: params.branchId,
+      },
+      neonClient,
+    );
     return {
       content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     };
   },
 
-  get_database_tables: async ({ params }) => {
-    const result = await handleGetDatabaseTables({
-      projectId: params.projectId,
-      branchId: params.branchId,
-      databaseName: params.databaseName,
-    });
+  get_database_tables: async ({ params }, neonClient) => {
+    const result = await handleGetDatabaseTables(
+      {
+        projectId: params.projectId,
+        branchId: params.branchId,
+        databaseName: params.databaseName,
+      },
+      neonClient,
+    );
     return {
       content: [
         {
@@ -1523,11 +1645,14 @@ export const NEON_HANDLERS = {
     };
   },
 
-  create_branch: async ({ params }) => {
-    const result = await handleCreateBranch({
-      projectId: params.projectId,
-      branchName: params.branchName,
-    });
+  create_branch: async ({ params }, neonClient) => {
+    const result = await handleCreateBranch(
+      {
+        projectId: params.projectId,
+        branchName: params.branchName,
+      },
+      neonClient,
+    );
     return {
       content: [
         {
@@ -1544,12 +1669,15 @@ export const NEON_HANDLERS = {
     };
   },
 
-  prepare_database_migration: async ({ params }) => {
-    const result = await handleSchemaMigration({
-      migrationSql: params.migrationSql,
-      databaseName: params.databaseName,
-      projectId: params.projectId,
-    });
+  prepare_database_migration: async ({ params }, neonClient) => {
+    const result = await handleSchemaMigration(
+      {
+        migrationSql: params.migrationSql,
+        databaseName: params.databaseName,
+        projectId: params.projectId,
+      },
+      neonClient,
+    );
     return {
       content: [
         {
@@ -1577,10 +1705,13 @@ export const NEON_HANDLERS = {
     };
   },
 
-  complete_database_migration: async ({ params }) => {
-    const result = await handleCommitMigration({
-      migrationId: params.migrationId,
-    });
+  complete_database_migration: async ({ params }, neonClient) => {
+    const result = await handleCommitMigration(
+      {
+        migrationId: params.migrationId,
+      },
+      neonClient,
+    );
     return {
       content: [
         {
@@ -1598,12 +1729,15 @@ export const NEON_HANDLERS = {
     };
   },
 
-  describe_branch: async ({ params }) => {
-    const result = await handleDescribeBranch({
-      projectId: params.projectId,
-      branchId: params.branchId,
-      databaseName: params.databaseName,
-    });
+  describe_branch: async ({ params }, neonClient) => {
+    const result = await handleDescribeBranch(
+      {
+        projectId: params.projectId,
+        branchId: params.branchId,
+        databaseName: params.databaseName,
+      },
+      neonClient,
+    );
     return {
       content: [
         {
@@ -1616,11 +1750,14 @@ export const NEON_HANDLERS = {
     };
   },
 
-  delete_branch: async ({ params }) => {
-    await handleDeleteBranch({
-      projectId: params.projectId,
-      branchId: params.branchId,
-    });
+  delete_branch: async ({ params }, neonClient) => {
+    await handleDeleteBranch(
+      {
+        projectId: params.projectId,
+        branchId: params.branchId,
+      },
+      neonClient,
+    );
     return {
       content: [
         {
@@ -1635,14 +1772,17 @@ export const NEON_HANDLERS = {
     };
   },
 
-  get_connection_string: async ({ params }) => {
-    const result = await handleGetConnectionString({
-      projectId: params.projectId,
-      branchId: params.branchId,
-      computeId: params.computeId,
-      databaseName: params.databaseName,
-      roleName: params.roleName,
-    });
+  get_connection_string: async ({ params }, neonClient) => {
+    const result = await handleGetConnectionString(
+      {
+        projectId: params.projectId,
+        branchId: params.branchId,
+        computeId: params.computeId,
+        databaseName: params.databaseName,
+        roleName: params.roleName,
+      },
+      neonClient,
+    );
     return {
       content: [
         {
@@ -1667,25 +1807,31 @@ export const NEON_HANDLERS = {
     };
   },
 
-  provision_neon_auth: async ({ params }) => {
-    const result = await handleProvisionNeonAuth({
-      projectId: params.projectId,
-      database: params.database,
-    });
+  provision_neon_auth: async ({ params }, neonClient) => {
+    const result = await handleProvisionNeonAuth(
+      {
+        projectId: params.projectId,
+        database: params.database,
+      },
+      neonClient,
+    );
     return result;
   },
 
-  explain_sql_statement: async ({ params }) => {
-    const result = await handleExplainSqlStatement({ params });
+  explain_sql_statement: async ({ params }, neonClient) => {
+    const result = await handleExplainSqlStatement({ params }, neonClient);
     return result;
   },
 
-  prepare_query_tuning: async ({ params }) => {
-    const result = await handleQueryTuning({
-      sql: params.sql,
-      databaseName: params.databaseName,
-      projectId: params.projectId,
-    });
+  prepare_query_tuning: async ({ params }, neonClient) => {
+    const result = await handleQueryTuning(
+      {
+        sql: params.sql,
+        databaseName: params.databaseName,
+        projectId: params.projectId,
+      },
+      neonClient,
+    );
     return {
       content: [
         {
@@ -1708,26 +1854,32 @@ export const NEON_HANDLERS = {
     };
   },
 
-  complete_query_tuning: async ({
-    params,
-  }: {
-    params: HandlerParams['complete_query_tuning'];
-  }) => {
-    const result = await handleCompleteTuning({
-      suggestedSqlStatements: params.suggestedSqlStatements,
-      applyChanges: params.applyChanges,
-      tuningId: params.tuningId,
-      databaseName: params.databaseName,
-      projectId: params.projectId,
-      temporaryBranch: {
-        id: params.temporaryBranchId,
-        project_id: params.projectId,
-      } as Branch,
-      shouldDeleteTemporaryBranch: params.shouldDeleteTemporaryBranch,
-      branch: params.branchId
-        ? ({ id: params.branchId, project_id: params.projectId } as Branch)
-        : undefined,
-    });
+  complete_query_tuning: async (
+    {
+      params,
+    }: {
+      params: HandlerParams['complete_query_tuning'];
+    },
+    neonClient: Api<unknown>,
+  ) => {
+    const result = await handleCompleteTuning(
+      {
+        suggestedSqlStatements: params.suggestedSqlStatements,
+        applyChanges: params.applyChanges,
+        tuningId: params.tuningId,
+        databaseName: params.databaseName,
+        projectId: params.projectId,
+        temporaryBranch: {
+          id: params.temporaryBranchId,
+          project_id: params.projectId,
+        } as Branch,
+        shouldDeleteTemporaryBranch: params.shouldDeleteTemporaryBranch,
+        branch: params.branchId
+          ? ({ id: params.branchId, project_id: params.projectId } as Branch)
+          : undefined,
+      },
+      neonClient,
+    );
 
     return {
       content: [
