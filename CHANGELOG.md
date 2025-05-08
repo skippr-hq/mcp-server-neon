@@ -1,6 +1,6 @@
 # Changelog
 
-## UNRELEASED
+## [0.4.0] - 2025-05-08
 
 - Feature: Support for remote MCP with OAuth flow.
 - Remove `__node_version` tool
