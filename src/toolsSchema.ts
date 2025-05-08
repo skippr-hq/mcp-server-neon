@@ -161,7 +161,7 @@ export const getConnectionStringInputSchema = z.object({
     .string()
     .optional()
     .describe(
-      'The ID of the compute/endpoint. If not provided, the only available compute will be used.',
+      'The ID of the compute/endpoint. If not provided, the read-write compute associated with the branch will be used.',
     ),
   databaseName: z.string().optional().describe(DATABASE_NAME_DESCRIPTION),
   roleName: z
@@ -236,5 +236,36 @@ export const completeQueryTuningInputSchema = z.object({
     .optional()
     .describe(
       'The ID or name of the branch that receives the changes. If not provided, the default (main) branch will be used.',
+    ),
+});
+
+export const listSlowQueriesInputSchema = z.object({
+  projectId: z
+    .string()
+    .describe('The ID of the project to list slow queries from'),
+  branchId: z
+    .string()
+    .optional()
+    .describe(
+      'An optional ID of the branch. If not provided the default branch is used.',
+    ),
+  databaseName: z.string().optional().describe(DATABASE_NAME_DESCRIPTION),
+  computeId: z
+    .string()
+    .optional()
+    .describe(
+      'The ID of the compute/endpoint. If not provided, the read-write compute associated with the branch will be used.',
+    ),
+  limit: z
+    .number()
+    .optional()
+    .default(10)
+    .describe('Maximum number of slow queries to return'),
+  minExecutionTime: z
+    .number()
+    .optional()
+    .default(1000)
+    .describe(
+      'Minimum execution time in milliseconds to consider a query as slow',
     ),
 });

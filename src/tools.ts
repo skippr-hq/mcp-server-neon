@@ -31,12 +31,15 @@ import {
   provisionNeonAuthInputSchema,
   runSqlInputSchema,
   runSqlTransactionInputSchema,
+  listSlowQueriesInputSchema,
 } from './toolsSchema.js';
+
 import {
   DESCRIBE_DATABASE_STATEMENTS,
   getDefaultDatabase,
   splitSqlStatements,
 } from './utils.js';
+
 // Define the tools with their configurations
 export const NEON_TOOLS = [
   {
@@ -566,6 +569,20 @@ export const NEON_TOOLS = [
                  `,
     inputSchema: completeQueryTuningInputSchema,
   },
+  {
+    name: 'list_slow_queries' as const,
+    description: `
+    <use_case>
+      Use this tool to list slow queries from your Neon database.
+    </use_case>
+
+    <important_notes>
+      This tool queries the pg_stat_statements extension to find queries that are taking longer than expected.
+      The tool will return queries sorted by execution time, with the slowest queries first.
+    </important_notes>
+                 `,
+    inputSchema: listSlowQueriesInputSchema,
+  },
 ];
 
 // Extract the tool names as a union type
@@ -611,22 +628,6 @@ async function handleCreateProject(neonClient: Api<unknown>, name?: string) {
     throw new Error(`Failed to create project: ${JSON.stringify(response)}`);
   }
   return response.data;
-  /*try {
-    const response = await neonClient.createProject({
-      project: { name },
-    });
-    
-    return response.data;
-  } catch (error) {
-    
-    if (error instanceof Object && "status" in error && error.status === 422) {
-      throw new Error(
-        `You have reached the Neon project limit. Please upgrade your account in this link: https://console.neon.tech/app/billing`,
-      );
-    }
-
-    throw new Error(`Failed to create project: ${error}`);
-  }*/
 }
 
 async function handleDeleteProject(
@@ -1470,6 +1471,114 @@ async function handleCompleteTuning(
   }
 }
 
+async function handleListSlowQueries(
+  {
+    projectId,
+    branchId,
+    databaseName,
+    computeId,
+    limit = 10,
+  }: {
+    projectId: string;
+    branchId?: string;
+    databaseName?: string;
+    computeId?: string;
+    limit?: number;
+  },
+  neonClient: Api<unknown>,
+) {
+  // Get connection string
+  const connectionString = await handleGetConnectionString(
+    {
+      projectId,
+      branchId,
+      computeId,
+      databaseName,
+    },
+    neonClient,
+  );
+
+  // Connect to the database
+  const sql = neon(connectionString.uri);
+
+  // First, check if pg_stat_statements extension is installed
+  const checkExtensionQuery = `
+    SELECT EXISTS (
+      SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements'
+    ) as extension_exists;
+  `;
+
+  const extensionCheck = await sql.query(checkExtensionQuery);
+  const extensionExists = extensionCheck[0]?.extension_exists;
+
+  if (!extensionExists) {
+    throw new Error(
+      `pg_stat_statements extension is not installed on the database. Please install it using the following command: CREATE EXTENSION pg_stat_statements;`,
+    );
+  }
+
+  // Query to get slow queries
+  const slowQueriesQuery = `
+    SELECT 
+      query,
+      calls,
+      total_exec_time,
+      mean_exec_time,
+      rows,
+      shared_blks_hit,
+      shared_blks_read,
+      shared_blks_written,
+      shared_blks_dirtied,
+      temp_blks_read,
+      temp_blks_written,
+      wal_records,
+      wal_fpi,
+      wal_bytes
+    FROM pg_stat_statements
+    WHERE query NOT LIKE '%pg_stat_statements%'
+    AND query NOT LIKE '%EXPLAIN%'
+    ORDER BY mean_exec_time DESC
+    LIMIT $1;
+  `;
+
+  const slowQueries = await sql.query(slowQueriesQuery, [limit]);
+
+  // Format the results
+  const formattedQueries = slowQueries.map((query: any) => {
+    return {
+      query: query.query,
+      calls: query.calls,
+      total_exec_time_ms: query.total_exec_time,
+      mean_exec_time_ms: query.mean_exec_time,
+      rows: query.rows,
+      shared_blocks: {
+        hit: query.shared_blks_hit,
+        read: query.shared_blks_read,
+        written: query.shared_blks_written,
+        dirtied: query.shared_blks_dirtied,
+      },
+      temp_blocks: {
+        read: query.temp_blks_read,
+        written: query.temp_blks_written,
+      },
+      io_time: {
+        read_ms: query.blk_read_time,
+        write_ms: query.blk_write_time,
+      },
+      wal: {
+        records: query.wal_records,
+        full_page_images: query.wal_fpi,
+        bytes: query.wal_bytes,
+      },
+    };
+  });
+
+  return {
+    slow_queries: formattedQueries,
+    total_queries_found: formattedQueries.length,
+  };
+}
+
 export const NEON_HANDLERS = {
   list_projects: async ({ params }, neonClient) => {
     const projects = await handleListProjects(params, neonClient);
@@ -1870,6 +1979,27 @@ export const NEON_HANDLERS = {
       neonClient,
     );
 
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+
+  list_slow_queries: async ({ params }, neonClient) => {
+    const result = await handleListSlowQueries(
+      {
+        projectId: params.projectId,
+        branchId: params.branchId,
+        databaseName: params.databaseName,
+        computeId: params.computeId,
+        limit: params.limit,
+      },
+      neonClient,
+    );
     return {
       content: [
         {
