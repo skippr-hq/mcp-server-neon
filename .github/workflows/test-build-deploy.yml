@@ -61,8 +61,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Build Docker image
+      # Build for main branch only
       - name: Build Docker image
+        if: github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -73,8 +74,9 @@ jobs:
             ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT }}/neon-mcp-server/neon-mcp-server:${{ steps.get-short-sha.outputs.SHORT_COMMIT_SHA }}
             ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT }}/neon-mcp-server/neon-mcp-server:${{ github.ref_name }}
 
-      # Deploy to Cloud Run
+      # Deploy to Cloud Run (main branch only)
       - name: Deploy to Cloud Run
+        if: github.ref == 'refs/heads/main'
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: neon-mcp-server
