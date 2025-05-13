@@ -17,10 +17,11 @@ function apiKeyAuthMiddleware(req: Request, res: Response, next: () => void) {
   const authHeader = req.headers.authorization || '';
   if (authHeader.startsWith('Bearer ')) {
     // Accept any non-empty Bearer token for now (or add your own validation logic)
-    return next();
+    next();
+    return;
   }
   // No Authorization header, pass to next middleware (OAuth)
-  return next();
+  next();
 }
 
 export const createSseTransport = () => {
@@ -35,10 +36,10 @@ export const createSseTransport = () => {
     const authHeader = req.headers.authorization || '';
     if (authHeader.startsWith('Bearer ')) {
       // API key auth: skip OAuth routes
-      return apiKeyAuthMiddleware(req, res, next);
+      apiKeyAuthMiddleware(req, res, next);
     } else {
       // OAuth: use authRouter
-      return authRouter(req, res, next);
+      authRouter(req, res, next);
     }
   });
 
@@ -64,10 +65,10 @@ export const createSseTransport = () => {
       const authHeader = req.headers.authorization || '';
       if (authHeader.startsWith('Bearer ')) {
         // API key auth: allow
-        return next();
+        next();
       } else {
         // OAuth: require authentication
-        return requiresAuth()(req, res, next);
+        requiresAuth()(req, res, next);
       }
     },
     async (req: Request, res: Response) => {
