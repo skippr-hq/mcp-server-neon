@@ -39,7 +39,7 @@ export const createSseTransport = () => {
       apiKeyAuthMiddleware(req, res, next);
     } else {
       // OAuth: use authRouter
-      authRouter(req, res, next);
+      void authRouter(req, res, next);
     }
   });
 
@@ -68,7 +68,7 @@ export const createSseTransport = () => {
         next();
       } else {
         // OAuth: require authentication
-        requiresAuth()(req, res, next);
+        void requiresAuth()(req, res, next);
       }
     },
     async (req: Request, res: Response) => {
