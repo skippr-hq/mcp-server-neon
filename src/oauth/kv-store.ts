@@ -10,7 +10,9 @@ const SCHEMA = 'mcpauth';
 const usePostgres = Boolean(process.env.OAUTH_DATABASE_URL);
 
 const createKeyv = <T>(options: KeyvPostgresOptions) =>
-  usePostgres ? new Keyv<T>({ store: new KeyvPostgres(options) }) : new Keyv<T>();
+  usePostgres
+    ? new Keyv<T>({ store: new KeyvPostgres(options) })
+    : new Keyv<T>();
 
 export const clients = createKeyv<Client>({
   connectionString: process.env.OAUTH_DATABASE_URL,

@@ -55,6 +55,7 @@ The server will be available at http://localhost:3001
 ## Authentication
 
 This fork uses a simplified authentication method:
+
 - Provide your Neon API key directly as a Bearer token in the Authorization header
 - Example: `Authorization: Bearer your-neon-api-key`
 
@@ -79,7 +80,7 @@ class NeonMCPClient:
     def __init__(self):
         self.session = None
         self._neon_api_key = os.environ["NEON_API_KEY"]
-        
+
     async def connect(self):
         # Connect to MCP server using SSE client
         streams_context = sse_client(
@@ -90,7 +91,7 @@ class NeonMCPClient:
         session_context = ClientSession(*streams)
         self.session = await session_context.__aenter__()
         await self.session.initialize()
-        
+
     async def get_available_tools(self):
         # Get available tools
         if not self.session:
@@ -104,7 +105,7 @@ class NeonMCPClient:
             }
             for tool in tools_response.tools
         ]
-        
+
     async def execute_tool(self, tool_name, arguments):
         # Execute SQL tool on Neon
         result = await self.session.call_tool(tool_name, arguments)
@@ -129,5 +130,3 @@ response = await agent.create_message(
 if tool_call := response.tool_calls[0]:
     result = await neon_client.execute_tool(tool_call.name, tool_call.input)
 ```
-
-
