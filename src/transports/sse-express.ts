@@ -11,19 +11,37 @@ import {
   requiresAuth,
 } from '../oauth/utils.js';
 import bodyParser from 'body-parser';
-import cookieParser from 'cookie-parser';
+
+// API Key authentication middleware
+function apiKeyAuthMiddleware(req: Request, res: Response, next: () => void) {
+  const authHeader = req.headers.authorization || '';
+  if (authHeader.startsWith('Bearer ')) {
+    // Accept any non-empty Bearer token for now (or add your own validation logic)
+    next();
+    return;
+  }
+  // No Authorization header, pass to next middleware (OAuth)
+  next();
+}
 
 export const createSseTransport = () => {
   const app = express();
 
   app.use(morganConfig);
   app.use(errorHandler);
-  app.use(cookieParser());
   app.use(ensureCorsHeaders());
-  app.use(express.static('public'));
-  app.set('view engine', 'pug');
-  app.set('views', 'src/views');
-  app.use('/', authRouter);
+
+  // Use API key auth if Authorization header is present, otherwise use OAuth
+  app.use((req, res, next) => {
+    const authHeader = req.headers.authorization || '';
+    if (authHeader.startsWith('Bearer ')) {
+      // API key auth: skip OAuth routes
+      apiKeyAuthMiddleware(req, res, next);
+    } else {
+      // OAuth: use authRouter
+      void authRouter(req, res, next);
+    }
+  });
 
   // to support multiple simultaneous connections we have a lookup object from
   // sessionId to transport
@@ -43,7 +61,16 @@ export const createSseTransport = () => {
   app.get(
     '/sse',
     bodyParser.raw(),
-    requiresAuth(),
+    (req, res, next) => {
+      const authHeader = req.headers.authorization || '';
+      if (authHeader.startsWith('Bearer ')) {
+        // API key auth: allow
+        next();
+      } else {
+        // OAuth: require authentication
+        void requiresAuth()(req, res, next);
+      }
+    },
     async (req: Request, res: Response) => {
       const access_token = extractBearerToken(
         req.headers.authorization as string,
