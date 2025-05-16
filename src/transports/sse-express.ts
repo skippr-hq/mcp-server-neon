@@ -58,6 +58,14 @@ export const createSseTransport = () => {
     });
   }) as RequestHandler);
 
+  app.get('/health-check', (req: Request, res: Response) => {
+    res.send({
+      status: 'healthy',
+      message: 'Neon MCP Server is running',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   app.get(
     '/sse',
     bodyParser.raw(),
